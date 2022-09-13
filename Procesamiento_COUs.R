@@ -20,8 +20,6 @@ wd <- "C:/Users/renato/GitHub/scn_scae_gt/datos/"
 setwd(wd)
 getwd()
 
-
-
 # Lógica recursiva
 # ================
 
@@ -101,6 +99,3 @@ for (i in 1:length(hojas)) {
       "Id. Unidad")
   
 }
-
-
-
