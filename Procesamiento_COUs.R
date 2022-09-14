@@ -29,6 +29,10 @@ rm(list = ls())
 archivo <- "GTM_COUS_DESAGREGADOS_2013_2020.xlsx"
 hojas <- excel_sheets(archivo)
 
+# Eliminamos las de precios constantes por conveniencia de análisis
+hojas <- hojas[-c(3,5,7,9,11,13,15)]
+
+
 lista <- c("inicio")
 
 for (i in 1:length(hojas)) {
@@ -97,5 +101,56 @@ for (i in 1:length(hojas)) {
       "Columnas",
       "Valor",
       "Id. Unidad")
+  
+  # Cuadro de utilización
+  # =====================
+  
+  utilizacion <- as.matrix(read_excel(
+    archivo,
+    range = paste("'" , hojas[i], "'!C252:FL476", sep = ""),
+    col_names = FALSE,
+    col_types = "numeric"
+  ))
+  rownames(utilizacion) <-
+    c(sprintf("uf%03d", seq(1, dim(utilizacion)[1])))
+  colnames(utilizacion) <-
+    c(sprintf("uc%03d", seq(1, dim(utilizacion)[2])))
+  
+  #   Columnas y filas a eliminar con subtotales y totales
+  
+  #   uc130	P2 CONSUMO INTERMEDIO (PC)	SUBTOTAL DE MERCADO
+  #   uc135	P2 CONSUMO INTERMEDIO (PC)	SUBTOTAL USO FINAL PROPIO
+  #   uc147	P2 CONSUMO INTERMEDIO (PC)	SUBTOTAL NO DE MERCADO
+  #   uc148	"P2 TOTAL CONSUMO INTERMEDIO
+  #   uc149 VACIA
+  #   uc150 VACIA
+  #   uc153	P6 EXPORTACIONES (FOB) TOTAL
+  #   uc155 Desagregación irrelevante
+  #   uc156 Desagregación irrelevante
+  #   uc160 Subtotal Gobienro General
+  #   uc161 Total gasto de consumo final
+  #   uc165 P.5 TOTAL FORMACION BRUTA DE CAPITAL
+  #   uc166	TOTAL UTILIZACIÓN
+  
+  #   Filas a eliminar
+  #   214, 215, 216, 218, 219, 224, 225
+  
+  utilizacion <- utilizacion[-c(214, 215, 216, 218, 219, 224, 225),
+                             -c(130, 135, 147, 148, 149, 150, 153,
+                                155, 156, 160, 161, 165, 166)]
+  
+  # Desdoblamos
+  utilizacion <-
+    cbind(anio, id_precios,1, melt(utilizacion), id_unidad)
+  
+  colnames(utilizacion) <-
+    c("Año",
+      "Id. Precios",
+      "Id. Cuadro",
+      "Filas",
+      "Columnas",
+      "Valor",
+      "Id. Unidad")
+  
   
 }
