@@ -10,6 +10,8 @@ library(openxlsx)
 library(reshape2)
 library(stringr)
 library(plyr)
+library(RSQLite)
+library(DBI)
 
 # Limpiar el área de trabajo
 rm(list = ls())
@@ -45,9 +47,10 @@ for (i in 1:length(hojas)) {
   )
   # Extraemos el texto de la cadena de caracteres
   anio <- as.numeric((str_extract(info[1,2 ], "\\d{4}")))
-  unidad <- toString(info[1,1 ]) # unidad de medida
+  unidad <- toString(info[2,1 ]) # unidad de medida
   # precios Corrientes o medidas Encadenados
   if (unidad != "Millones de quetzales") {
+    precios <- "Constantes"
     id_precios <- 2
     unidad <- c("Millones de quetzales en medidas encadenadas de volumen con año de referencia 2013")
     id_unidad <- 2
@@ -88,19 +91,20 @@ for (i in 1:length(hojas)) {
   
   # 214, 215, 216, 217, 218, 219, 224, 225
   
-  oferta <- oferta[-c(214, 215, 216, 217, 218, 219, 224, 225), -c(130,135,147,148,149,150,153,155,160,165,166)]
+  oferta <- oferta[-c(214, 215, 216, 217, 218, 219, 224, 225),
+                   -c(130,135,147,148,149,150,153,155,160,165,166)]
   
   # Desdoblamos
   oferta <- cbind(anio, id_precios,1, melt(oferta), id_unidad)
   
   colnames(oferta) <-
-    c("Año",
-      "Id. Precios",
-      "Id. Cuadro",
-      "Filas",
-      "Columnas",
-      "Valor",
-      "Id. Unidad")
+    c("anio",
+      "idPrecios",
+      "idCuadro",
+      "filas",
+      "columnas",
+      "valor",
+      "idUnidad")
   
   # Cuadro de utilización
   # =====================
@@ -141,16 +145,84 @@ for (i in 1:length(hojas)) {
   
   # Desdoblamos
   utilizacion <-
-    cbind(anio, id_precios,1, melt(utilizacion), id_unidad)
+    cbind(anio, id_precios,2, melt(utilizacion), id_unidad)
   
   colnames(utilizacion) <-
-    c("Año",
-      "Id. Precios",
-      "Id. Cuadro",
-      "Filas",
-      "Columnas",
-      "Valor",
-      "Id. Unidad")
+    c("anio",
+      "idPrecios",
+      "idCuadro",
+      "filas",
+      "columnas",
+      "valor",
+      "idUnidad")
+
   
-  
+  # Unimos todas las partes
+  if (precios == "Corrientes") {
+    union <- rbind(oferta, 
+                   utilizacion
+                   #,valorAgregado, 
+                   #empleo
+                   )
+    
+    assign(paste("COU_", anio, "_", precios, sep = ""), 
+           union)
+  } else {
+    union <- rbind(oferta, utilizacion)
+    assign(paste("COU_", anio, "_", precios, sep = ""), 
+           union)
+  }
+  lista <- c(lista, paste("COU_", anio, "_", precios, sep = ""))
 }
+# Actualizamos nuestra lista de objetos creados
+lista <- lapply(lista[-1], as.name)
+
+# Unimos los objetos de todos los años y precios
+SCN <- do.call(rbind.data.frame, lista)
+
+# Convertimos los valores NA a 0
+SCN$Valor[is.na(SCN$Valor)] <- 0
+
+# Y borramos los objetos individuales
+do.call(rm,lista)
+
+# Recolección de basura
+gc()
+
+# ====================
+# Base de datos SQLite
+# ====================
+
+con <- dbConnect(RSQLite::SQLite(), "scn.db")
+
+db
+dbCreateTable(con, "OfertaUtilizacion", SCN)
+summary(con)
+dbListTables(con)
+dbListFields(con, "OfertaUtilizacion")
+dbDisconnect(con)
+
+
+# ====================
+# Otras exportaciones
+# ====================
+
+# Y lo exportamos a Excel
+# write.xlsx(
+#   SCN,
+#   "SCN_BD.xlsx",
+#   sheetName= "SCNGT_BD",
+#   rowNames=FALSE,
+#   colnames=FALSE,
+#   overwrite = TRUE,
+#   asTable = FALSE
+# )
+
+# El formato CSV se exporta muy grande, pero se comprime muy bien a 3mb
+# write.csv(
+#   SCN,
+#   "scn.csv",
+#   col.names = TRUE,
+#   row.names = FALSE,
+#   fileEncoding = "UTF-8"
+# )
