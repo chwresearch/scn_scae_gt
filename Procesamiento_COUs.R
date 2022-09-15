@@ -70,11 +70,12 @@ for (i in 1:length(hojas)) {
     col_names = FALSE,
     col_types = "numeric"
   ))
-  rownames(oferta) <- c(sprintf("of%03d", seq(1, dim(oferta)[1])))
+  rownames(oferta) <- c(sprintf("f%03d", seq(1, dim(oferta)[1])))
   colnames(oferta) <- c(sprintf("oc%03d", seq(1, dim(oferta)[2])))
   
   # Columnas a eliminar con subtotales y totales
   
+  # 129 SIFMI (Lo eliminamos porque no tiene datos en ningún año)
   # 130	P1 PRODUCCION (PB)	Producción de mercado		SUBTOTAL DE MERCADO
   # 135	P1 PRODUCCION (PB)	Producción para uso final propio		SUBTOTAL USO FINAL PROPIO
   # 147	P1 PRODUCCION (PB)	Producción no de mercado		SUBTOTAL NO DE MERCADO
@@ -91,20 +92,22 @@ for (i in 1:length(hojas)) {
   
   # 214, 215, 216, 217, 218, 219, 224, 225
   
-  oferta <- oferta[-c(214, 215, 216, 217, 218, 219, 224, 225),
-                   -c(130,135,147,148,149,150,153,155,160,165,166)]
+  oferta <- oferta[-c(214, 215, 216, 217, 218, 
+                      219, 224, 225),
+                   -c(129, 130,135,147,148,149,
+                      150,153,155,160,165,166)]
   
   # Desdoblamos
   oferta <- cbind(anio, id_precios,1, melt(oferta), id_unidad)
   
   colnames(oferta) <-
     c("anio",
-      "idPrecios",
-      "idCuadro",
-      "filas",
-      "columnas",
+      "id_precios",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
       "valor",
-      "idUnidad")
+      "id_unidad")
   
   # Cuadro de utilización
   # =====================
@@ -116,7 +119,7 @@ for (i in 1:length(hojas)) {
     col_types = "numeric"
   ))
   rownames(utilizacion) <-
-    c(sprintf("uf%03d", seq(1, dim(utilizacion)[1])))
+    c(sprintf("f%03d", seq(1, dim(utilizacion)[1])))
   colnames(utilizacion) <-
     c(sprintf("uc%03d", seq(1, dim(utilizacion)[2])))
   
@@ -129,8 +132,7 @@ for (i in 1:length(hojas)) {
   #   uc149 VACIA
   #   uc150 VACIA
   #   uc153	P6 EXPORTACIONES (FOB) TOTAL
-  #   uc155 Desagregación irrelevante
-  #   uc156 Desagregación irrelevante
+  #   uc157 SUBTOTAL ISFL
   #   uc160 Subtotal Gobienro General
   #   uc161 Total gasto de consumo final
   #   uc165 P.5 TOTAL FORMACION BRUTA DE CAPITAL
@@ -140,8 +142,8 @@ for (i in 1:length(hojas)) {
   #   214, 215, 216, 218, 219, 224, 225
   
   utilizacion <- utilizacion[-c(214, 215, 216, 218, 219, 224, 225),
-                             -c(130, 135, 147, 148, 149, 150, 153,
-                                155, 156, 160, 161, 165, 166)]
+                             -c(129, 130, 135, 147, 148, 149, 150,
+                                153, 155, 156, 160, 161, 165, 166)]
   
   # Desdoblamos
   utilizacion <-
@@ -149,12 +151,12 @@ for (i in 1:length(hojas)) {
   
   colnames(utilizacion) <-
     c("anio",
-      "idPrecios",
-      "idCuadro",
-      "filas",
-      "columnas",
+      "id_precios",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
       "valor",
-      "idUnidad")
+      "id_unidad")
 
   
   # Unimos todas las partes
@@ -181,7 +183,7 @@ lista <- lapply(lista[-1], as.name)
 SCN <- do.call(rbind.data.frame, lista)
 
 # Convertimos los valores NA a 0
-SCN$Valor[is.na(SCN$Valor)] <- 0
+SCN$valor[is.na(SCN$valor)] <- 0
 
 # Y borramos los objetos individuales
 do.call(rm,lista)
@@ -189,17 +191,107 @@ do.call(rm,lista)
 # Recolección de basura
 gc()
 
+# ===============
+# Clasificaciones
+#================
+
+clasifs <- "CLASIFICACIONES.xlsx"
+
+# Columnas
+columnas <- read_excel(
+  clasifs,
+  sheet = "columnas"  ,
+  col_names = TRUE
+)
+
+# filas
+filas <- read_excel(
+  clasifs,
+  sheet = "filas"  ,
+  col_names = TRUE
+)
+
+# ntg2
+ntg2 <- read_excel(
+  clasifs,
+  sheet = "ntg2"  ,
+  col_names = TRUE
+)
+
+# npg
+npg <- read_excel(
+  clasifs,
+  sheet = "npg"  ,
+  col_names = TRUE
+)
+
+# naeg
+naeg <- read_excel(
+  clasifs,
+  sheet = "naeg"  ,
+  col_names = TRUE
+)
+
+# areas_filas
+areas_filas <- read_excel(
+  clasifs,
+  sheet = "areas_filas"  ,
+  col_names = TRUE
+)
+
+# areas_columnas
+areas_columnas <- read_excel(
+  clasifs,
+  sheet = "areas_columnas"  ,
+  col_names = TRUE
+)
+
 # ====================
 # Base de datos SQLite
 # ====================
 
 con <- dbConnect(RSQLite::SQLite(), "scn.db")
-
-db
-dbCreateTable(con, "OfertaUtilizacion", SCN)
+dbCreateTable(con, "oferta_utilizacion", SCN)
+dbAppendTable(con, "oferta_utilizacion", SCN)
 summary(con)
+
+# columnas
+dbCreateTable(con, "columnas", columnas)
+dbAppendTable(con, "columnas", columnas)
+
+# filas
+dbCreateTable(con, "filas", filas)
+dbAppendTable(con, "filas", filas)
+
+# ntg2
+dbCreateTable(con, "ntg2", ntg2)
+dbAppendTable(con, "ntg2", ntg2)
+
+# npg
+dbCreateTable(con, "npg", npg)
+dbAppendTable(con, "npg", npg)
+
+# naeg
+dbCreateTable(con, "naeg", naeg)
+dbAppendTable(con, "naeg", naeg)
+
+# areas_filas
+dbCreateTable(con, "areas_filas", areas_filas)
+dbAppendTable(con, "areas_filas", areas_filas)
+
+# areas_columnas
+dbCreateTable(con, "areas_columnas", areas_columnas)
+dbAppendTable(con, "areas_columnas", areas_columnas)
+
 dbListTables(con)
-dbListFields(con, "OfertaUtilizacion")
+dbGetQuery(con, "SELECT id_cuadro, id_ntg2, sum(valor)
+           FROM oferta_utilizacion
+           LEFT JOIN columnas on oferta_utilizacion.id_columna = columnas.id_columna 
+           LEFT JOIN ntg2 on id_ntg2=idNTG2
+           WHERE anio=2014
+           GROUP BY id_cuadro, id_ntg2, ntg2")
+
+
 dbDisconnect(con)
 
 
