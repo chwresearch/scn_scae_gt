@@ -17,7 +17,7 @@ library(DBI)
 rm(list = ls())
 
 # Se pone la ruta de trabajo en una variable (con "/")
-wd <- "C:/Users/renato/GitHub/scn_scae_gt/datos/"
+wd <- "/home/renato/GitHub/scn_scae_gt/datos/"
 # Cambiar la ruta de trabajo con la variable anterior
 setwd(wd)
 getwd()
@@ -143,7 +143,7 @@ for (i in 1:length(hojas)) {
   
   utilizacion <- utilizacion[-c(214, 215, 216, 218, 219, 224, 225),
                              -c(129, 130, 135, 147, 148, 149, 150,
-                                153, 155, 156, 160, 161, 165, 166)]
+                                153, 157, 160, 161, 165, 166)]
   
   # Desdoblamos
   utilizacion <-
