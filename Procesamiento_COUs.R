@@ -284,16 +284,42 @@ dbCreateTable(con, "areas_columnas", areas_columnas)
 dbAppendTable(con, "areas_columnas", areas_columnas)
 
 dbListTables(con)
-dbGetQuery(con, "SELECT id_cuadro, id_ntg2, sum(valor)
-           FROM oferta_utilizacion
-           LEFT JOIN columnas on oferta_utilizacion.id_columna = columnas.id_columna 
-           LEFT JOIN ntg2 on id_ntg2=idNTG2
-           WHERE anio=2014
-           GROUP BY id_cuadro, id_ntg2, ntg2")
-
+dbGetQuery(con, "
+SELECT 
+    id_cuadro, 
+    id_ntg2, 
+    sum(valor)
+FROM 
+    oferta_utilizacion
+LEFT JOIN 
+    columnas
+ON
+    oferta_utilizacion.id_columna = columnas.id_columna 
+LEFT JOIN 
+    ntg2 
+ON
+    id_ntg2=idNTG2
+WHERE 
+    anio=2014
+GROUP BY 
+    id_cuadro, id_ntg2, ntg2
+")
 
 dbDisconnect(con)
 
+# Consulta prueba
+con <- dbConnect(RSQLite::SQLite(), "scn.db")
+dbGetQuery(con, "
+SELECT
+    anio,
+    id_cuadro, 
+    sum(valor)
+FROM 
+    oferta_utilizacion
+GROUP BY 
+    anio, id_cuadro
+")
+dbDisconnect(con)
 
 # ====================
 # Otras exportaciones
