@@ -17,7 +17,7 @@ library(DBI)
 rm(list = ls())
 
 # Se pone la ruta de trabajo en una variable (con "/")
-wd <- "/home/renato/GitHub/scn_scae_gt/datos/"
+wd <- "C:/Users/renato/GitHub/scn_scae_gt/datos/"
 # Cambiar la ruta de trabajo con la variable anterior
 setwd(wd)
 getwd()
@@ -246,10 +246,28 @@ areas_columnas <- read_excel(
   col_names = TRUE
 )
 
+# areas_columnas
+energia <- read_excel(
+  clasifs,
+  sheet = "energia"  ,
+  col_names = TRUE
+)
+
+# cuadros
+cuadros <- read_excel(
+  clasifs,
+  sheet = "cuadros"  ,
+  col_names = TRUE
+)
+
+
 # ====================
 # Base de datos SQLite
 # ====================
 
+if (file.exists("scn.db")) {
+  file.remove("scn.db")
+}
 con <- dbConnect(RSQLite::SQLite(), "scn.db")
 dbCreateTable(con, "oferta_utilizacion", SCN)
 dbAppendTable(con, "oferta_utilizacion", SCN)
@@ -283,42 +301,36 @@ dbAppendTable(con, "areas_filas", areas_filas)
 dbCreateTable(con, "areas_columnas", areas_columnas)
 dbAppendTable(con, "areas_columnas", areas_columnas)
 
-dbListTables(con)
-dbGetQuery(con, "
-SELECT 
-    id_cuadro, 
-    id_ntg2, 
-    sum(valor)
-FROM 
-    oferta_utilizacion
-LEFT JOIN 
-    columnas
-ON
-    oferta_utilizacion.id_columna = columnas.id_columna 
-LEFT JOIN 
-    ntg2 
-ON
-    id_ntg2=idNTG2
-WHERE 
-    anio=2014
-GROUP BY 
-    id_cuadro, id_ntg2, ntg2
-")
+# energia
+dbCreateTable(con, "energia", energia)
+dbAppendTable(con, "energia", energia)
 
-dbDisconnect(con)
+# cuadros
+dbCreateTable(con, "cuadros", cuadros)
+dbAppendTable(con, "cuadros", cuadros)
 
 # Consulta prueba
-con <- dbConnect(RSQLite::SQLite(), "scn.db")
 dbGetQuery(con, "
 SELECT
     anio,
-    id_cuadro, 
+    cuadro,
     sum(valor)
 FROM 
     oferta_utilizacion
+JOIN
+    cuadros
+ON
+    oferta_utilizacion.id_cuadro
+    =
+    cuadros.id_cuadro
 GROUP BY 
-    anio, id_cuadro
+    anio, oferta_utilizacion.id_cuadro
+ORDER BY
+    anio, oferta_utilizacion.id_cuadro
 ")
+
+dbListTables(con)
+
 dbDisconnect(con)
 
 # ====================

@@ -1,0 +1,87 @@
+---
+title: "CIEE Análisis"
+author: "Renato Vargas"
+format: pdf
+editor: source
+---
+
+## Introducción
+
+En este documento se detalla los pasos utilizados para el análisis.
+
+## Hallazgos
+
+El primer paso consiste en cargar las librerías necesarias para el análisis.
+
+```{r}
+library(RSQLite)
+library(DBI)
+```
+
+Nos conectamos a la base de datos a través del paquete DBI y obtenemos objetos de datos usando SQL. Idealmente, la base de datos cuenta con la documentación adecuada, pero en una primera instancia se explora la base de datos para saber con qué tablas y variables cuenta. Utilizamos la función `dbConnect()` habilitada por el paquete DBI para abrir una conexión con la base de datos SQLite del Sistema de Cuentas Nacionales. Una vez concluido el análisis, se utiliza `dbDisconnect()` para cerrar la conexión como puede verse al final de esta memoria de análisis. Además de abrir la conexión, se utiliza la función `dbListTables()` para saber con qué tablas cuenta la base de datos.
+
+```{r}
+con <- dbConnect(RSQLite::SQLite(), "C:/Users/renato/GitHub/scn_scae_gt/datos/scn.db")
+dbListTables(con)
+```
+
+La mayoría de tablas en esta base datos explican los valores de los campos de las tablas principales `oferta_utilizacion` y `balances_energeticos`. Por esa razón, es importante saber con qué campos cuentan estas dos tablas.
+
+```{r}
+dbListFields(con, "oferta_utilizacion")
+```
+
+Puesto que esta base de datos contiene los cuadros de oferta y utilización de los años 2013 a 2020 y esta, a su vez, cuenta con cientos de miles de registros, se condujo un proceso de normalización de la base datos, con el objetivo que la tabla principal cuente con la menor cantidad de columnas y dentro de estas, con la menor cantidad de valores para reducir el tamaño y evitar las redundancias de datos. Se puede inspeccionar las primeras filas de la tabla `oferta_utilizacion`. Hay varias formas de hacer esto, tanto en R, como en SQL. Para mantener la consistencia con las consultas de SQL, aquí se utilizará este lenguaje y se hace una consulta de los primeros cinco registros de la tabla `oferta_utilizacion` y todas las columnas .
+
+```{r}
+dbGetQuery(con ,"SELECT * FROM oferta_utilizacion LIMIT 5")
+```
+Es evidente que los valores de las columnas no son descriptivos por si solos y es necesario recurrir a vinculos con las demás tablas de la base de datos para entender a qué transacciones, productos y actividades económicas se refiere la columna de `valor`. Esto se hace a través de uniones en el lenguaje SQL, identificadas por la palabra clave `JOIN`.
+
+Por ejemplo, si estuviéramos interesados en saber cuáles fue la oferta monetaria de productos energéticos en el año 2014, debemos hacer las uniones de nuestra tabla principal `oferta_utilizacion` con las diferentes tablas necesarias para nuestra consulta, como lo son `cuadros`, `energia` y `npg`. 
+
+```{r}
+dbGetQuery(con, "
+SELECT
+    energia,
+    filas.id_npg4 as id_npg4,
+    npg4,
+    sum(valor)
+FROM 
+    oferta_utilizacion
+JOIN
+    filas
+ON
+    oferta_utilizacion.id_fila
+    =
+    filas.id_fila
+JOIN
+    energia
+ON
+    filas.id_npg4 
+    =
+    energia.id_npg4
+WHERE
+    anio = 2014
+AND
+    id_cuadro = 2
+AND
+    id_energia > 1
+GROUP BY 
+    energia.id_energia,
+    filas.id_npg4,
+    npg4
+ORDER BY
+    energia.id_energia,
+    filas.id_npg4,
+    npg4
+")
+
+
+```
+
+Finalmente, es necesario cerrar la conexión que se abrió al inicio de este apartado, usando la función `dbDisconnect()`.
+
+```{r}
+dbDisconnect(con)
+```
