@@ -1,7 +1,7 @@
 ---
 title: "CIEE Análisis"
 author: "Renato Vargas"
-format: pdf
+format: html
 editor: source
 ---
 
@@ -43,10 +43,10 @@ Por ejemplo, si estuviéramos interesados en saber cuáles fue la oferta monetar
 ```{r}
 dbGetQuery(con, "
 SELECT
-    energia,
-    filas.id_npg4 as id_npg4,
-    npg4,
-    sum(valor)
+    energia as 'Tipo de Energético',
+    filas.id_npg4 as 'NPG',
+    npg4EnergiaCorto as 'Producto Energético',
+    sum(valor) as 'Millones de Q'
 FROM 
     oferta_utilizacion
 JOIN
@@ -64,7 +64,7 @@ ON
 WHERE
     anio = 2014
 AND
-    id_cuadro = 2
+    id_cuadro = 1
 AND
     id_energia > 1
 GROUP BY 
@@ -79,6 +79,54 @@ ORDER BY
 
 
 ```
+O por ejemplo, nos gustaría saber qué actividades económicas consumen Leña y en qué magnitud.
+
+```{r}
+dbGetQuery(con, "
+SELECT
+    columnas.id_ntg2,
+    sum(valor) as 'Millones de Q'
+FROM 
+    oferta_utilizacion
+JOIN
+    filas
+ON
+    oferta_utilizacion.id_fila
+    =
+    filas.id_fila
+JOIN
+    columnas
+ON
+    oferta_utilizacion.id_columna
+    =
+    columnas.id_columna
+JOIN
+    energia
+ON
+    filas.id_npg4
+    =
+    energia.id_npg4
+JOIN
+    naeg
+ON
+    columnas.id_naeg
+    =
+    naeg.id_naeg
+JOIN
+    ntg2
+ON
+    columnas.id_ntg2
+    =
+    ntg2.id_ntg2
+WHERE
+    anio = 2015
+GROUP BY 
+    columnas.id_ntg2
+")
+
+```
+
+
 
 Finalmente, es necesario cerrar la conexión que se abrió al inicio de este apartado, usando la función `dbDisconnect()`.
 
