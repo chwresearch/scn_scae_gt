@@ -49,13 +49,13 @@ SELECT
     sum(valor) as 'Millones de Q'
 FROM 
     oferta_utilizacion
-JOIN
+LEFT JOIN
     filas
 ON
     oferta_utilizacion.id_fila
     =
     filas.id_fila
-JOIN
+LEFT JOIN
     energia
 ON
     filas.id_npg4 
@@ -85,34 +85,35 @@ O por ejemplo, nos gustaría saber qué actividades económicas consumen Leña y
 dbGetQuery(con, "
 SELECT
     columnas.id_ntg2,
+    ntg2.ntg2,
     sum(valor) as 'Millones de Q'
 FROM 
     oferta_utilizacion
-JOIN
+LEFT JOIN
     filas
 ON
     oferta_utilizacion.id_fila
     =
     filas.id_fila
-JOIN
+LEFT JOIN
     columnas
 ON
     oferta_utilizacion.id_columna
     =
     columnas.id_columna
-JOIN
+LEFT JOIN
     energia
 ON
     filas.id_npg4
     =
     energia.id_npg4
-JOIN
+LEFT JOIN
     naeg
 ON
     columnas.id_naeg
     =
     naeg.id_naeg
-JOIN
+LEFT JOIN
     ntg2
 ON
     columnas.id_ntg2
@@ -121,7 +122,8 @@ ON
 WHERE
     anio = 2015
 GROUP BY 
-    columnas.id_ntg2
+    columnas.id_ntg2,
+    ntg2.ntg2
 ")
 
 ```
