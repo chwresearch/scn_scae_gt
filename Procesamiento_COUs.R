@@ -12,6 +12,7 @@ library(stringr)
 library(plyr)
 library(RSQLite)
 library(DBI)
+library(readr)
 
 # Limpiar el área de trabajo
 rm(list = ls())
@@ -28,16 +29,25 @@ getwd()
 # Limpiar el área de trabajo
 rm(list = ls())
 
+# Identificador de país
+pais <- "Guatemala"
+iso3 <- "GTM"
+
 archivo <- "GTM_COUS_DESAGREGADOS_2013_2020.xlsx"
 hojas <- excel_sheets(archivo)
 
 # Eliminamos las de precios constantes por conveniencia de análisis
 hojas <- hojas[-c(3,5,7,9,11,13,15)]
-
+# i <- 1
 
 lista <- c("inicio")
 
 for (i in 1:length(hojas)) {
+  
+  # ==================================
+  # MÓDULO DE PROCESAMIENTO DE EXCELES
+  # ==================================
+  
   # Extraemos el año y la unidad de medida
   info <- read_excel(
     archivo,
@@ -48,37 +58,70 @@ for (i in 1:length(hojas)) {
   # Extraemos el texto de la cadena de caracteres
   anio <- as.numeric((str_extract(info[1,2 ], "\\d{4}")))
   unidad <- toString(info[2,1 ]) # unidad de medida
-  # precios Corrientes o medidas Encadenados
+  
+  # Determinación de precios corrientes o constantes
   if (unidad != "Millones de quetzales") {
     precios <- "Constantes"
     id_precios <- 2
     unidad <- c("Millones de quetzales en medidas encadenadas de volumen con año de referencia 2013")
     id_unidad <- 2
-  }
-  else {
+  }else {
     precios <- "Corrientes"
     id_precios <- 1
-    id_unidad <- 1
+    id_unidad <- 1 # Millones de quetzales
   }
   
-  # Cuadro de Oferta
-  # ================
+  # Procesamiento del Cuadro de Oferta
+  # ==================================
   
+  id_cuadro <- 1 # 1  Oferta monetaria
+  
+  # Como puede verse en el parámetro range de la función read_excel(), 
+  # lo que hacemos, en esencia, es leer todas las celdas numéricas del
+  # cuadro, incluyendo espacios vacíos, columnas y filas de subtotales,
+  # para poder clasificar cada celda respecto a cuatro dimensiones:
+  # la transacción a la que corresponde, la actividad económica que la 
+  # realiza, el producto objeto de la transacción y una cuarta que
+  # captura los elementos no estándar comunes en los cuadros de oferta
+  # y utilización publicados por los bancos centrales e institutos de
+  # estadística a través de lo que llamamos "Áreas transaccionales de
+  # fila o de columna". 
+  
+  # Leemos todo el rectángulo que contiene datos.
   oferta <- as.matrix(read_excel(
     archivo,
     range = paste("'" , hojas[i], "'!C16:FL240", sep = ""),
     col_names = FALSE,
     col_types = "numeric"
   ))
-  rownames(oferta) <- c(sprintf("f%03d", seq(1, dim(oferta)[1])))
-  colnames(oferta) <- c(sprintf("oc%03d", seq(1, dim(oferta)[2])))
   
-  # Columnas a eliminar con subtotales y totales
+  # Y en este punto simplemente le damos una identificación correlativa 
+  # a cada fila y a cada columna. En el caso de las filas, ambos cuadros 
+  # de oferta y utilización, comparten exactamente los mismos valores. 
+  # Por esa razón el correlativo solamente se compone de un identificador 
+  # ISO3 de país (GTM en este caso), una letra "f" minúscula (de filas)  
+  # y un correlativo de tres dígitos. Esto lo hacemos accediendo a los 
+  # nombres de fila y columna con las funciones `rownames()` y `colnames()`
+  # y asignándoles la secuencia compuesta por los elementos descritos.
+  
+  # Las funciones esenciales para lograr esto son `sprintf()` combinada con
+  # 'seq()'. Nótese que se embebe la función `paste()` que nos permite
+  # concatenar el texto del código de país (GTM por ejemplo) con el formato
+  # del correlativo de fila o columna. También embebemos la función `dim()`
+  # dentro de la función `seq()` la cual nos permite saber programáticamente
+  # las dimensiones de la matriz importada.
+  
+  rownames(oferta) <- c(sprintf(paste(iso3,"f%03d",  sep = ""), seq(1, dim(oferta)[1])))
+  colnames(oferta) <- c(sprintf(paste(iso3,"oc%03d", sep = ""), seq(1, dim(oferta)[2])))
+
+  # El siguiente punto consiste en identificar las columnas a eliminar,
+  # las cuales contienen subtotales y totales, contando como 1, la primera
+  # celda leída en el módulo anterior.
   
   # 129 SIFMI (Lo eliminamos porque no tiene datos en ningún año)
-  # 130	P1 PRODUCCION (PB)	Producción de mercado		SUBTOTAL DE MERCADO
-  # 135	P1 PRODUCCION (PB)	Producción para uso final propio		SUBTOTAL USO FINAL PROPIO
-  # 147	P1 PRODUCCION (PB)	Producción no de mercado		SUBTOTAL NO DE MERCADO
+  # 130	P1 PRODUCCION (PB)	Producción de mercado	SUBTOTAL DE MERCADO
+  # 135	P1 PRODUCCION (PB)	Producción para uso final propio SUBTOTAL USO FINAL PROPIO
+  # 147	P1 PRODUCCION (PB)	Producción no de mercado SUBTOTAL NO DE MERCADO
   # 148	P1 TOTAL PRODUCCION (PB)
   # 149 VACIA
   # 150 VACIA
@@ -88,40 +131,74 @@ for (i in 1:length(hojas)) {
   # 165 MARGENES DE DISTRIBUCION TOTAL
   # 166	TOTAL OFERTA (PC)	TOTAL OFERTA (PC)
   
-  # Filas a eliminar con celdas vacías y subtotales
+  # Seguidamnete, identificamos en nuestro Excel las filas vacías y que contienen
+  # subtotales para ser eliminadas.
   
-  # 214, 215, 216, 217, 218, 219, 224, 225
+  # 214, 215, 216, 218, 219, 224, 225
   
-  oferta <- oferta[-c(214, 215, 216, 217, 218, 
+  # A través del concepto de índices [fila, columna], utilizado en la notación 
+  # matricial para referirnos a la posición de una o más celdas en una matriz, 
+  # a través del signo menos (-) eliminamos las filas y columnas identificadas 
+  # en el paso anterior.
+  
+  oferta <- oferta[-c(214, 215, 216, 218, 
                       219, 224, 225),
                    -c(129, 130,135,147,148,149,
                       150,153,155,160,165,166)]
   
-  # Desdoblamos
-  oferta <- cbind(anio, id_precios,1, melt(oferta), id_unidad)
+  # El resultado es una matriz rectangular de datos válidos y únicos. Es decir,
+  # sin subtotales y totales que duplican los datos básicos. El siguiente paso 
+  # transforma esa matriz de dos dimensiones a una tabla de datos de una sola
+  # dimensión que nos va a permitir guardar y manipular nuestros datos a 
+  # través de una base de datos y el lenguaje de consultas estructuradas SQL.
+  
+  # Esto se logra con la función `melt()` de la librería `reshape2`. Nótese
+  # que para ahorrar un paso creamos columnas adicionales que representan
+  # lo mínimo necesario para poder identificar el año, el identificador de
+  # a qué cuadro pertenecen los datos y la unidad de medida del cuadro.
+  
+  # Anteriormente, agregábamos un identificador de precios constantes o 
+  # corrientes. No obstante, en aras de estandarizar este procedimiento
+  # para temas energéticos, ambientales de empleo y otros que no usan esa 
+  # diferenciación, decidimos que la distinción de constantes o corrientes 
+  # se hará a través del campo de unidad de medida `id_unidad`. Es decir
+  # Millones de quetzales constantes. 
+  
+  # Por el momento no se incluirá precios constantes.
+  
+  oferta <- cbind(iso3, anio,id_cuadro, melt(oferta), id_unidad)
   
   colnames(oferta) <-
-    c("anio",
-      "id_precios",
+    c("iso3",
+      "anio",
       "id_cuadro",
       "id_fila",
       "id_columna",
       "valor",
       "id_unidad")
   
-  # Cuadro de utilización
-  # =====================
   
+  # Procesamiento del Cuadro de Utilización
+  # =======================================
+  
+  id_cuadro  <- 2 # Utilización monetaria
+  
+  # El procesamiento del Cuadro de Utilización es idéntico al de oferta. 
+  
+  # Leemos el rectángulo de datos del archivo de Excel original.
   utilizacion <- as.matrix(read_excel(
     archivo,
     range = paste("'" , hojas[i], "'!C252:FL476", sep = ""),
     col_names = FALSE,
     col_types = "numeric"
   ))
+  
+  # Y nombramos las filas y columnas con los correlativos necesarios.
   rownames(utilizacion) <-
-    c(sprintf("f%03d", seq(1, dim(utilizacion)[1])))
+    c(sprintf(paste(iso3,"f%03d",  sep = ""), seq(1, dim(utilizacion)[1])))
+  
   colnames(utilizacion) <-
-    c(sprintf("uc%03d", seq(1, dim(utilizacion)[2])))
+    c(sprintf(paste(iso3,"uc%03d", sep = ""), seq(1, dim(utilizacion)[2])))
   
   #   Columnas y filas a eliminar con subtotales y totales
   
@@ -141,17 +218,21 @@ for (i in 1:length(hojas)) {
   #   Filas a eliminar
   #   214, 215, 216, 218, 219, 224, 225
   
+  # A través de índices eliminamos lo que no se necesita.
   utilizacion <- utilizacion[-c(214, 215, 216, 218, 219, 224, 225),
                              -c(129, 130, 135, 147, 148, 149, 150,
                                 153, 157, 160, 161, 165, 166)]
   
-  # Desdoblamos
+  # Aplicamos la función `melt()` para convertir a formato de tabla de base
+  # de datos, poniendo cuidado en que las columnas sean compatibles con el
+  # cuadro de oferta que creamos en la sección anterior.
+  
   utilizacion <-
-    cbind(anio, id_precios,2, melt(utilizacion), id_unidad)
+    cbind(iso3,anio, id_cuadro, melt(utilizacion), id_unidad)
   
   colnames(utilizacion) <-
-    c("anio",
-      "id_precios",
+    c("iso3",
+      "anio",
       "id_cuadro",
       "id_fila",
       "id_columna",
@@ -159,7 +240,9 @@ for (i in 1:length(hojas)) {
       "id_unidad")
 
   
-  # Unimos todas las partes
+  # Unión de los cuadros procesados
+  # ===============================
+  
   if (precios == "Corrientes") {
     union <- rbind(oferta, 
                    utilizacion
@@ -176,13 +259,31 @@ for (i in 1:length(hojas)) {
   }
   lista <- c(lista, paste("COU_", anio, "_", precios, sep = ""))
 }
-# Actualizamos nuestra lista de objetos creados
+
+# =====================================================
+# MÓDULO DE CREACIÓN DE BASE DE DATOS RELACIONAL SQLITE
+#======================================================
+
+# Todas las funciones de procesamiento de datos del módulo anterior
+# están embebidas en un bucle que itera a través de todas las pestañas
+# de un archivo de Excel que contienen los cuadros de oferta y 
+# utilización para cada año, unas a precios corrientes y otras a 
+# precios constantes, y permite guardar cada grupo de cuadros procesados
+# con un nombre según su año (por ejemplo, COU_2013_corrientes).
+
+# Llevamos el control de los objetos a través de una `lista` de objetos
+# que hemos ido actualizando a medida que se agrega cada nuevo objeto.
+# Ahora esa lista nos servirá para hacer referencia a todos los objetos
+# que queremos unir en uno solo.
+
+# Eliminamos el primer elemento provisional que usamos para inicializar
+# la lista, pues R no nos permite declarar listas vacías. 
 lista <- lapply(lista[-1], as.name)
 
 # Unimos los objetos de todos los años y precios
 SCN <- do.call(rbind.data.frame, lista)
 
-# Convertimos los valores NA a 0
+# Por conveniencia, convertimos los valores NA a 0
 SCN$valor[is.na(SCN$valor)] <- 0
 
 # Y borramos los objetos individuales
@@ -194,6 +295,24 @@ gc()
 # ===============
 # Clasificaciones
 #================
+
+# Ya le hemos dado identificadores únicos a cada una de las filas y columnas
+# de nuestra información importada. Ahora es necesario darle sentido a cada
+# una de ellas. Esto se hace a través de la creación de tablas de 
+# equivalencias. A través del proceso de normalización de base de datos nos
+# aseguramos que no existan redundancias en las tablas de la base de datos.
+
+# La normalización permite mantener las descripciones de cada elemento en una
+# tabla dedicada, para que estas solo existan en un lugar, de manera que si 
+# se necesita hacer cambios, solamente se harán una vez.
+
+# Hemos creado un archivo de excel que cuenta con estas tablas de equivalencia
+# en cada una de sus pestañas. Aquí las cargamos.
+
+# Nótese que aquí estamos creando una base de datos relacional y por eso 
+# mantendremos separadas las tablas. Si estuviéramos haciendo un "Flat File"
+# lo haríamos creando las columnas necesarias en la misma tabla a través de
+# la función `join()`.
 
 clasifs <- "CLASIFICACIONES.xlsx"
 
@@ -269,8 +388,8 @@ if (file.exists("scn.db")) {
   file.remove("scn.db")
 }
 con <- dbConnect(RSQLite::SQLite(), "scn.db")
-dbCreateTable(con, "oferta_utilizacion", SCN)
-dbAppendTable(con, "oferta_utilizacion", SCN)
+dbCreateTable(con, "scn", SCN)
+dbAppendTable(con, "scn", SCN)
 summary(con)
 
 # columnas
@@ -316,37 +435,53 @@ SELECT
     cuadro,
     sum(valor)
 FROM 
-    oferta_utilizacion
-JOIN
+    scn
+LEFT JOIN
     cuadros
 ON
-    oferta_utilizacion.id_cuadro
+    scn.id_cuadro
     =
     cuadros.id_cuadro
 GROUP BY 
-    anio, oferta_utilizacion.id_cuadro
-ORDER BY
-    anio, oferta_utilizacion.id_cuadro
+    anio, cuadro
 ")
 
 dbListTables(con)
+dbListFields(con,"cuadros")
 
+# Creamos una vista para facilitar las consultas y exportación a flat file
+# de Excel. Usamos un archivo SQL para trabajar más fácilmente con
+# la consulta SQL aparte.
+
+query <- read_file("VIEW_oferta_utilizacion.sql")
+dbSendQuery(con, query)
 dbDisconnect(con)
 
 # ====================
 # Otras exportaciones
 # ====================
 
+con <- dbConnect(RSQLite::SQLite(), "scn.db")
+
+SCN2 <- dbGetQuery(con,"
+SELECT 
+  * 
+FROM 
+  oferta_utilizacion 
+")
+
 # Y lo exportamos a Excel
-# write.xlsx(
-#   SCN,
-#   "SCN_BD.xlsx",
-#   sheetName= "SCNGT_BD",
-#   rowNames=FALSE,
-#   colnames=FALSE,
-#   overwrite = TRUE,
-#   asTable = FALSE
-# )
+write.xlsx(
+  SCN2,
+  "SCN_BD.xlsx",
+  sheetName= "SCNGT_BD",
+  rowNames=FALSE,
+  colnames=FALSE,
+  overwrite = TRUE,
+  asTable = FALSE
+)
+
+dbDisconnect(con)
 
 # El formato CSV se exporta muy grande, pero se comprime muy bien a 3mb
 # write.csv(
