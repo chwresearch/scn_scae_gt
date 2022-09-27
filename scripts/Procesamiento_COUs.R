@@ -17,12 +17,6 @@ library(readr)
 # Limpiar el área de trabajo
 rm(list = ls())
 
-# Se pone la ruta de trabajo en una variable (con "/")
-wd <- "C:/Users/renato/GitHub/scn_scae_gt/datos/"
-# Cambiar la ruta de trabajo con la variable anterior
-setwd(wd)
-getwd()
-
 # Lógica recursiva
 # ================
 
@@ -33,7 +27,7 @@ rm(list = ls())
 pais <- "Guatemala"
 iso3 <- "GTM"
 
-archivo <- "GTM_COUS_DESAGREGADOS_2013_2020.xlsx"
+archivo <- "datos/GTM_COUS_DESAGREGADOS_2013_2020.xlsx"
 hojas <- excel_sheets(archivo)
 
 # Eliminamos las de precios constantes por conveniencia de análisis
@@ -314,7 +308,7 @@ gc()
 # lo haríamos creando las columnas necesarias en la misma tabla a través de
 # la función `join()`.
 
-clasifs <- "CLASIFICACIONES.xlsx"
+clasifs <- "datos/CLASIFICACIONES.xlsx"
 
 # Columnas
 columnas <- read_excel(
@@ -384,10 +378,10 @@ cuadros <- read_excel(
 # Base de datos SQLite
 # ====================
 
-if (file.exists("scn.db")) {
-  file.remove("scn.db")
+if (file.exists("datos/scn.db")) {
+  file.remove("datos/scn.db")
 }
-con <- dbConnect(RSQLite::SQLite(), "scn.db")
+con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
 dbCreateTable(con, "scn", SCN)
 dbAppendTable(con, "scn", SCN)
 summary(con)
@@ -461,7 +455,7 @@ dbDisconnect(con)
 # Otras exportaciones
 # ====================
 
-con <- dbConnect(RSQLite::SQLite(), "scn.db")
+con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
 
 SCN2 <- dbGetQuery(con,"
 SELECT 
@@ -473,7 +467,7 @@ FROM
 # Y lo exportamos a Excel
 write.xlsx(
   SCN2,
-  "SCN_BD.xlsx",
+  "datos/SCN_BD.xlsx",
   sheetName= "SCNGT_BD",
   rowNames=FALSE,
   colnames=FALSE,
