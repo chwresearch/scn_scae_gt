@@ -447,7 +447,7 @@ dbListFields(con,"cuadros")
 # de Excel. Usamos un archivo SQL para trabajar más fácilmente con
 # la consulta SQL aparte.
 
-query <- read_file("VIEW_oferta_utilizacion.sql")
+query <- read_file("scripts/VIEW_oferta_utilizacion.sql")
 dbSendQuery(con, query)
 dbDisconnect(con)
 
