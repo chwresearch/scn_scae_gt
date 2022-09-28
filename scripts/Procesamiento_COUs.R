@@ -20,6 +20,16 @@ rm(list = ls())
 # Lógica recursiva
 # ================
 
+# Nota: Hacemos referencia a los archivos tomando 
+# como punto de partida la raíz del repositorio
+
+# scn_scae_gt
+#   ├───datos
+#   ├───documentos
+#   │   └───presentaciones
+#   └───scripts
+
+
 # Limpiar el área de trabajo
 rm(list = ls())
 
@@ -65,7 +75,7 @@ for (i in 1:length(hojas)) {
     id_unidad <- 1 # Millones de quetzales
   }
   
-  # Procesamiento del Cuadro de Oferta
+  # Procesamiento del Cuadro de Oferta Energética
   # ==================================
   
   id_cuadro <- 1 # 1  Oferta monetaria

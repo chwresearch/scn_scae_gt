@@ -1,0 +1,258 @@
+---
+title: "Memoria de Procesamiento COUs"
+author: "Renato Vargas"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# Procesamiento Cuadros de Oferta y Utilización - Años 2013-2020
+
+## Introducción
+
+Como primer paso llamamos las librerías necesarias para el procesamiento de datos.
+
+
+```{r}
+library(readxl)
+library(openxlsx)
+library(reshape2)
+library(stringr)
+library(plyr)
+library(RSQLite)
+library(DBI)
+library(readr)
+```
+
+Limpiamos el área de trabajo para evitar problemas.
+
+```{r}
+rm(list = ls())
+
+```
+
+Es importante conocer la estructura de archivos de nuestro análisis y es necesario mantener un mapa mental de los diferentes directorios en los que tenemos nuestros datos y scripts de procesamiento. En el caso de nuestro repositorio de análisis, nos interesa el directorio `datos`.
+
+```
+scn_scae_gt
+   ├───datos
+   ├───documentos
+   │   └───presentaciones
+   └───scripts
+```
+
+Empezamos por crear variables con datos básicos de nuestro análisis. El nombre del país que estamos analizando, su código ISO de tres letras y la ruta al archivo en donde se encuentran nuestros datos. Nótese que normalmente si utilizamos un proyecto de RStudio, nuestra raíz se encontrará en donde se encuentra el archivo `.RProj`. No obstante, los documentos de Markdown tienen como raíz, el directorio en el que se encuentra el archivo por lo que debemos hacer referencia a los datos tomando esto en consideración.
+
+```{r}
+pais <- "Guatemala"
+iso3 <- "GTM"
+archivo <- "../../datos/GTM_COUS_DESAGREGADOS_2013_2020.xlsx"
+```
+
+
+Nuestro primer paso exploratorio será abrir el archivo de Excel y ver con qué pestañas cuenta. Colocamos el listado de los nombres de las pestañas en un vector llamado `hojas`.
+
+```{r}
+hojas <- excel_sheets(archivo)
+hojas
+```
+La documentación del archivo de Excel nos indica que cada pestaña cuenta con los cuadros de oferta y utilización para el año al que hace referencia el nombre y estos pueden ser a precios corrientes si están identificados con la letra "C" o precios constantes con la letra "K". El análisis de la cuenta de energía no utiliza los precios constantes. Por conveniencia de análisis eliminamos las hojas de este tipo de precios de nuestro listado a través de índices inversos pasando al índice `[ ]`un signo menos seguido de un vector con las posiciones a eliminar `-c()`.
+
+```{r}
+hojas <- hojas[-c(3,5,7,9,11,13,15)]
+hojas
+```
+En el código a continuación se encuentran múltiples instancias de la construcción `hojas[i]`. En vez de utilizar un número absoluto (ej. `hojas[2]`) para hacer referencia a la posición en el listado de la pestaña a analizar, utilizamos `i`, para poder después reutilizar el código de manera recursiva para analizar todas las hojas de manera programática, cambiando `i` por la posición de la pestaña en cada iteración. No haremos esto en esta guía, pero es un buen paso preparatorio.
+
+```{r}
+i <- 1
+```
+
+## Procesamiento inicial del archivo de Excel
+
+Primeramente obtenemos información de referencia del archivo de Excel que hemos inspeccionado visualmente en esa aplicación anteriormente. Sabemos en qué celdas de cada cuadro se encuentra esa información. Extraemos un rectángulo de celdas (una matriz) que cuenta con lo que nos interesa.
+
+```{r echo=TRUE, results="hide", warning=FALSE, message=FALSE}
+info <- read_excel(
+  archivo,
+  range = paste("'" , hojas[i], "'!A8:B9", sep = "") ,
+  col_names = FALSE,
+  col_types = "text")
+```
+
+```{r echo=FALSE}
+as.matrix(info)
+```
+
+
+Y vemos dos datos importantes que colocamos en dos variables. Utilizando la función str_extract( ,"\\d{4}") que combina la expresión regular que indica que debe encontrar cuatro números juntos obtenemos el año. Y la unidad de medida la obtenemos de la celda en la segunda fila y primera columna.
+
+```{r, }
+anio <- as.numeric((str_extract(info[1,2 ], "\\d{4}")))
+unidad <- toString(info[2,1 ]) # unidad de medida
+```
+
+```{r echo=FALSE}
+anio
+unidad
+```
+
+
+Creamos un bucle para establecer otras variables de apoyo según tengamos precios constantes o corrientes en nuestras variables iniciales. 
+
+```{r}
+# Determinación de precios corrientes o constantes
+if (unidad != "Millones de quetzales") {
+  precios <- "Constantes"
+  id_precios <- 2
+  unidad <- c("Millones de quetzales en medidas encadenadas de volumen con año de referencia 2013")
+  id_unidad <- 2
+}else {
+  precios <- "Corrientes"
+  id_precios <- 1
+  id_unidad <- 1 # Millones de quetzales
+}
+```
+
+```{r echo=FALSE}
+id_precios
+precios
+unidad
+```
+
+
+El siguiente paso es empezar la ingesta de datos del cuadro de oferta. Aprovechamos para establecer el identificador único del cuadro de oferta:
+
+```{r}
+id_cuadro <- 1 # 1  Oferta monetaria
+```
+
+Como puede verse en el parámetro range de la función read_excel(), lo que hacemos, en esencia, es leer todas las celdas numéricas del  cuadro, incluyendo espacios vacíos, columnas y filas de subtotales, para poder clasificar cada celda respecto a cuatro dimensiones: la transacción a la que corresponde, la actividad económica que la  realiza, el producto objeto de la transacción y una cuarta que  captura los elementos no estándar comunes en los cuadros de oferta y utilización publicados por los bancos centrales e institutos de estadística a través de lo que llamamos "Áreas transaccionales de fila o de columna".
+  
+Leemos todo el rectángulo que contiene datos.
+
+```{r echo=TRUE, results="hide", warning=FALSE, message=FALSE}
+oferta <- as.matrix(read_excel(
+  archivo,
+  range = paste("'" , hojas[i], "'!C16:FL240", sep = ""),
+  col_names = FALSE,
+  col_types = "numeric"
+))
+```
+
+Y en este punto simplemente le damos una identificación correlativa a cada fila y a cada columna. En el caso de las filas, ambos cuadros de oferta y utilización, comparten exactamente los mismos valores. Por esa razón el correlativo solamente se compone de un identificador ISO3 de país (GTM en este caso), una letra "f" minúscula (de filas) y un correlativo de tres dígitos. Esto lo hacemos accediendo a los nombres de fila y columna con las funciones `rownames()` y `colnames()` y asignándoles la secuencia compuesta por los elementos descritos.
+
+Las funciones esenciales para lograr esto son `sprintf()` combinada con 'seq()'. Nótese que se embebe la función `paste()` que nos permite concatenar el texto del código de país (GTM por ejemplo) con el formato del correlativo de fila o columna. También embebemos la función `dim()` dentro de la función `seq()` la cual nos permite saber programáticamente las dimensiones de la matriz importada.
+
+```{r}
+rownames(oferta) <- c(sprintf(paste(iso3,"f%03d",  sep = ""), 
+                              seq(1, dim(oferta)[1])))
+colnames(oferta) <- c(sprintf(paste(iso3,"oc%03d", sep = ""), 
+                              seq(1, dim(oferta)[2])))
+# Y mostramos una parte para referencia
+oferta[c(1:5),c(1:5)]
+```
+
+El siguiente punto consiste en identificar las columnas a eliminar,
+las cuales contienen subtotales y totales, contando como 1 la primera
+celda leída en el módulo anterior. Esto lo hacemos inspeccionando visualmente el archivo de Excel en esa aplicación previamente. El resultado es:
+
+```  
+129 SIFMI (Lo eliminamos porque no tiene datos en ningún año)
+130	P1 PRODUCCION (PB)	SUBTOTAL DE MERCADO
+135	P1 PRODUCCION (PB)	SUBTOTAL USO FINAL PROPIO
+147	P1 PRODUCCION (PB)	SUBTOTAL NO DE MERCADO
+148	P1 TOTAL PRODUCCION (PB)
+149 VACIA
+150 VACIA
+153	P7 IMPORTACIONES (CIF) TOTAL
+155 TOTAL OFERTA (a precios básicos)
+160	D21 IMPUESTOS SOBRE PRODUCTOS	TOTAL
+165 MARGENES DE DISTRIBUCION TOTAL
+166	TOTAL OFERTA (PC)	TOTAL OFERTA (PC)
+```
+
+Seguidamnete, identificamos en nuestro Excel las filas vacías y que contienen
+subtotales para ser eliminadas. Estas consisten del listado:
+
+```  
+c(214, 215, 216, 218, 219, 224, 225)
+```  
+
+A través del concepto de índices [fila, columna], utilizado en la notación 
+matricial para referirnos a la posición de una o más celdas en una matriz, 
+a través del signo menos (-) eliminamos las filas y columnas identificadas 
+en el paso anterior.
+  
+```{r}
+oferta <- oferta[-c(214, 215, 216, 218, 219,
+                    224, 225),
+                 -c(129, 130,135,147,148,149,
+                    150,153,155,160,165,166)]
+```
+
+  
+El resultado es una matriz rectangular de datos válidos y únicos. Es decir,
+sin subtotales y totales que duplican los datos básicos. El siguiente paso 
+transforma esa matriz de dos dimensiones a una tabla de datos de una sola
+dimensión que nos va a permitir guardar y manipular nuestros datos a 
+través de una base de datos y el lenguaje de consultas estructuradas SQL.
+  
+Esto se logra con la función `melt()` de la librería `reshape2`. Nótese
+que para ahorrar un paso creamos columnas adicionales que representan
+lo mínimo necesario para poder identificar el año, el identificador de
+a qué cuadro pertenecen los datos y la unidad de medida del cuadro.
+  
+Anteriormente, agregábamos un identificador de precios constantes o 
+corrientes. No obstante, en aras de estandarizar este procedimiento
+para temas energéticos, ambientales de empleo y otros que no usan esa 
+diferenciación, decidimos que la distinción de constantes o corrientes 
+se hará a través del campo de unidad de medida `id_unidad`. Es decir
+Millones de quetzales constantes. 
+  
+Por el momento no se incluirá precios constantes.
+
+```{r}
+# Unimos el resultado de melt() con columnas con los valores
+# de nuestras variables iniciales.
+oferta <- cbind(iso3, anio,id_cuadro, melt(oferta), id_unidad)
+
+# Y renombramos según nuestra nomenclatura y convenciones
+colnames(oferta) <-
+  c("iso3",
+    "anio",
+    "id_cuadro",
+    "id_fila",
+    "id_columna",
+    "valor",
+    "id_unidad")
+
+# Finalmente mostramos los primeros valores de la tabla
+# como referencia.
+head(oferta)
+```
