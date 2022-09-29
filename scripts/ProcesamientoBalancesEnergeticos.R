@@ -72,8 +72,8 @@ for (i in 1:length(hojas)){
   balanceBD <- cbind(anio,cuadro, melt(balance), unidad)
   
   # Renombramos filas y columnas
-  colnames(balanceBD) <- c("Año", "Cuadro", "Correlativo filas", 
-                         "Correlativo columnas", "Valor", "Unidad")
+  colnames(balanceBD) <- c("anio", "cuadro", "correlativo_filas", 
+                         "correlativo_columnas", "valor", "unidad")
   
   # Y guardamos el objeto completo
   assign(paste("BAL_",anio, sep = ""), balanceBD)
@@ -104,9 +104,20 @@ clasificacionFilas <- read_xlsx(
     "datos/CLASIFICACIONES_BALANCES.xlsx",
     sheet = "filas",
     col_names = TRUE)
-  
-BAL <- join(BAL,clasificacionFilas, by = "Correlativo filas")
-BAL <- join(BAL,clasificacionColumnas,by = "Correlativo columnas")
+
+clasificacionFilasXcolumnas <- read_xlsx(
+  "datos/CLASIFICACIONES_BALANCES.xlsx",
+  sheet = "filasXcolumnas",
+  col_names = TRUE)
+
+BAL <- join(BAL,clasificacionFilas, by = "correlativo_filas")
+BAL <- join(BAL,clasificacionColumnas,by = "correlativo_columnas")
+
+# Creamos la concatenacion de filas columnas para el ambiente
+BAL$id_filasXcolumnas <- paste(BAL$id_oferta_utilizacion, BAL$id_ntge, BAL$id_energetico, sep = "")
+
+# Y le damos sentido a la concatenación
+BAL <- join(BAL,clasificacionFilasXcolumnas, by = "id_filasXcolumnas")
 
 gc()
   

@@ -93,47 +93,50 @@ for (i in 1:length(hojas)) {
   # (productos energéticos) y eliminamos las columnas que no necesitamos
   # con totales y subtotales
   
-  oferta <- oferta[-c(214, 215, 216, 218, 
-                      219, 224, 225),
+  # En este punto nos concentramos solamente en las filas con productos
+  # energéticos.
+  
+  oferta_monetaria <- oferta[c(38,39,43,46,98,99,100,
+                     101,102,103,137,138,142),
                    -c(129, 130,135,147,148,149,
                       150,153,155,160,165,166)]
   
-  # El resultado es una matriz rectangular de datos válidos y únicos. Es decir,
-  # sin subtotales y totales que duplican los datos básicos. El siguiente paso 
-  # transforma esa matriz de dos dimensiones a una tabla de datos de una sola
-  # dimensión que nos va a permitir guardar y manipular nuestros datos a 
-  # través de una base de datos y el lenguaje de consultas estructuradas SQL.
+  # Creamos una versión solamente con la distribución porcentual de 
+  # producción.
   
-  # Esto se logra con la función `melt()` de la librería `reshape2`. Nótese
-  # que para ahorrar un paso creamos columnas adicionales que representan
-  # lo mínimo necesario para poder identificar el año, el identificador de
-  # a qué cuadro pertenecen los datos y la unidad de medida del cuadro.
+  distribucion_oferta <- oferta[c(38,39,43,46,98,99,100,
+                                    101,102,103,137,138,142),
+                                    -c(129,130,135,147:166)]
   
-  # Anteriormente, agregábamos un identificador de precios constantes o 
-  # corrientes. No obstante, en aras de estandarizar este procedimiento
-  # para temas energéticos, ambientales de empleo y otros que no usan esa 
-  # diferenciación, decidimos que la distinción de constantes o corrientes 
-  # se hará a través del campo de unidad de medida `id_unidad`. Es decir
-  # Millones de quetzales constantes. 
+  # Llenamos con cero las celdas vacías por conveniencia
+  distribucion_oferta[is.na(distribucion_oferta)] <- 0
   
-  # Por el momento no se incluirá precios constantes.
+  suma_distribucion_oferta <- rowSums(distribucion_oferta)
+  # Ceros
+  suma_distribucion_oferta[suma_distribucion_oferta == 0] <- 0.00001 
   
-  oferta <- cbind(iso3, anio,id_cuadro, melt(oferta), id_unidad)
+  # Obtenemos la distribución porcentual de lo monetario
+  distribucion_oferta <- distribucion_oferta / suma_distribucion_oferta
   
-  colnames(oferta) <-
-    c("iso3",
-      "anio",
-      "id_cuadro",
-      "id_fila",
-      "id_columna",
-      "valor",
-      "id_unidad")
+  # Limpiamos
+  rm(oferta, suma_distribucion_oferta)
   
+  # Melt 
+    
+  # oferta <- cbind(iso3, anio,id_cuadro, melt(oferta), id_unidad)
+  # colnames(oferta) <-
+  #   c("iso3",
+  #     "anio",
+  #     "id_cuadro",
+  #     "id_fila",
+  #     "id_columna",
+  #     "valor",
+  #     "id_unidad")
   
   # Procesamiento del Cuadro de Utilización
   # =======================================
   
-  id_cuadro  <- 2 # Utilización monetaria
+  id_cuadro  <- 4 # Utilización energética
   
   # El procesamiento del Cuadro de Utilización es idéntico al de oferta. 
   
@@ -167,29 +170,43 @@ for (i in 1:length(hojas)) {
   #   uc165 P.5 TOTAL FORMACION BRUTA DE CAPITAL
   #   uc166	TOTAL UTILIZACIÓN
   
-  #   Filas a eliminar
-  #   214, 215, 216, 218, 219, 224, 225
+  #   Solamente nos concentramos en los productos energéticos en las filas.
   
   # A través de índices eliminamos lo que no se necesita.
-  utilizacion <- utilizacion[-c(214, 215, 216, 218, 219, 224, 225),
+  utilizacion_monetaria <- utilizacion[c(38,39,43,46,98,99,100,
+                               101,102,103,137,138,142),
                              -c(129, 130, 135, 147, 148, 149, 150,
                                 153, 157, 160, 161, 165, 166)]
   
-  # Aplicamos la función `melt()` para convertir a formato de tabla de base
-  # de datos, poniendo cuidado en que las columnas sean compatibles con el
-  # cuadro de oferta que creamos en la sección anterior.
+  distribucion_utilizacion <- utilizacion[c(38,39,43,46,98,99,100,
+                                            101,102,103,137,138,142),
+                                          -c(129,130,135,147:154,
+                                             157,160:166)]
+
+  # Llenamos con cero las celdas vacías por conveniencia
+  distribucion_utilizacion[is.na(distribucion_utilizacion)] <- 0
   
-  utilizacion <-
-    cbind(iso3,anio, id_cuadro, melt(utilizacion), id_unidad)
+  # Obtenemos la suma de columnas que equivale a nuestro 100%
+  suma_distribucion_utilizacion <- rowSums(distribucion_utilizacion)
+  # Ceros
+  suma_distribucion_utilizacion[suma_distribucion_utilizacion == 0] <- 0.000001 
   
-  colnames(utilizacion) <-
-    c("iso3",
-      "anio",
-      "id_cuadro",
-      "id_fila",
-      "id_columna",
-      "valor",
-      "id_unidad")
+  # Obtenemos la distribución porcentual de lo monetario
+  distribucion_utilizacion <- distribucion_utilizacion / suma_distribucion_utilizacion
+  
+  # Y limpiamos
+  rm(utilizacion, suma_distribucion_utilizacion)
+  
+  # utilizacion <- cbind(iso3,anio, id_cuadro, melt(utilizacion), id_unidad)
+  # 
+  # colnames(utilizacion) <-
+  #   c("iso3",
+  #     "anio",
+  #     "id_cuadro",
+  #     "id_fila",
+  #     "id_columna",
+  #     "valor",
+  #     "id_unidad")
   
   
   # Unión de los cuadros procesados
