@@ -120,7 +120,12 @@ BAL$id_filasXcolumnas <- paste(BAL$id_oferta_utilizacion, BAL$id_ntge, BAL$id_en
 BAL <- join(BAL,clasificacionFilasXcolumnas, by = "id_filasXcolumnas")
 
 gc()
-  
+
+con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
+dbCreateTable(con, "balances_energeticos", BAL)
+dbAppendTable(con, "balances_energeticos", BAL)
+dbDisconnect(con)
+
 # Y lo exportamos a Excel
 write.xlsx(
   BAL,

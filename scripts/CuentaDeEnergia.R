@@ -12,6 +12,7 @@ library(readr)
 library(stringr)
 library(RSQLite)
 library(DBI)
+library(pivottabler)
 
 # Limpiar el área de trabajo
 rm(list = ls())
@@ -113,7 +114,7 @@ for (i in 1:length(hojas)) {
   
   suma_distribucion_oferta <- rowSums(distribucion_oferta)
   # Ceros
-  suma_distribucion_oferta[suma_distribucion_oferta == 0] <- 0.00001 
+  suma_distribucion_oferta[suma_distribucion_oferta == 0] <- 0.000001 
   
   # Obtenemos la distribución porcentual de lo monetario
   distribucion_oferta <- distribucion_oferta / suma_distribucion_oferta
@@ -165,7 +166,7 @@ for (i in 1:length(hojas)) {
   #   uc150 VACIA
   #   uc153	P6 EXPORTACIONES (FOB) TOTAL
   #   uc157 SUBTOTAL ISFL
-  #   uc160 Subtotal Gobienro General
+  #   uc160 Subtotal Gobierno General
   #   uc161 Total gasto de consumo final
   #   uc165 P.5 TOTAL FORMACION BRUTA DE CAPITAL
   #   uc166	TOTAL UTILIZACIÓN
@@ -180,7 +181,7 @@ for (i in 1:length(hojas)) {
   
   distribucion_utilizacion <- utilizacion[c(38,39,43,46,98,99,100,
                                             101,102,103,137,138,142),
-                                          -c(129,130,135,147:154,
+                                          -c(129,130,135,147:153,
                                              157,160:166)]
 
   # Llenamos con cero las celdas vacías por conveniencia
@@ -209,6 +210,56 @@ for (i in 1:length(hojas)) {
   #     "id_unidad")
   
   
+  # Traemos la producción y consumo intermedio y final energéticos
+  
+  con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
+  prod_cons_energetico <- 
+  join(
+    dbGetQuery(con,paste(
+    'SELECT 
+      id_npg4,
+      sum(valor) AS "Producción" 
+    FROM 
+      balances_energeticos
+    WHERE
+      anio = ', 
+    anio , 
+    ' and id_ntgeM = 1
+      and id_npg4 != "" 
+    GROUP BY 
+      id_npg4
+    ORDER BY
+      id_npg4')
+    )
+    ,
+    dbGetQuery(con,paste(
+      'SELECT 
+      id_npg4,
+      sum(valor) AS "Consumo intermedio y final"
+    FROM 
+      balances_energeticos
+    WHERE
+      anio = ', 
+      anio , 
+      ' and id_ntgeM = 4
+      and id_npg4 != "" 
+    GROUP BY 
+      id_npg4
+    ORDER BY
+      id_npg4')
+    )
+    ,
+    by = "id_npg4"
+  )  
+  
+  dbDisconnect(con)
+  
+  # Y multiplicamos la distribucion_oferta y distribucion_utilizacion por
+  # sus totales, para distribuirlo.
+  distribucion_oferta2 <- distribucion_oferta * prod_cons_energetico$`Producción`
+  distribucion_uti2 <- distribucion_utilizacion * prod_cons_energetico$`Consumo intermedio y final`
+  
+  distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(prod_cons_energetico$`Producción`) - as.matrix(rowSums(distribucion_oferta2)))
   # Unión de los cuadros procesados
   # ===============================
   
@@ -230,3 +281,31 @@ for (i in 1:length(hojas)) {
 }
 
 
+con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
+
+dbListTables(con)
+dbListFields(con,"oferta_utilizacion")
+
+# Creamos una vista para facilitar las consultas y exportación a flat file
+# de Excel. Usamos un archivo SQL para trabajar más fácilmente con
+# la consulta SQL aparte.
+test <- dbGetQuery(con, "select * from oferta_utilizacion where anio = 2013")
+
+dbDisconnect(con)
+
+pt <- PivotTable$new()
+pt$addData(test)
+pt$addColumnDataGroups("corr_ntg2", addTotal = TRUE)
+pt$addColumnDataGroups("ntg2", addTotal = FALSE)
+pt$addRowDataGroups("id_cuadro", addTotal = FALSE)
+pt$addRowDataGroups("cuadro")
+pt$addRowDataGroups("id_area_filas", addTotal = FALSE)
+pt$defineCalculation(calculationName = "Quetzales", summariseExpression = "sum(valor)")
+pt$renderPivot()
+
+wb <- createWorkbook(creator = Sys.getenv("USERNAME"))
+addWorksheet(wb, "Data")
+pt$writeToExcelWorksheet(wb=wb, wsName="Data", 
+                         topRowNumber=1, leftMostColumnNumber=1, 
+                         applyStyles=TRUE, mapStylesFromCSS=TRUE)
+saveWorkbook(wb, file="salidas/test.xlsx", overwrite = TRUE)
