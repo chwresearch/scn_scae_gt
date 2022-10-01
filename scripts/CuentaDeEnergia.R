@@ -9,6 +9,7 @@ library(readxl)
 library(openxlsx)
 library(reshape2)
 library(readr)
+library(plyr)
 library(stringr)
 library(RSQLite)
 library(DBI)
@@ -257,10 +258,17 @@ for (i in 1:length(hojas)) {
   # Y multiplicamos la distribucion_oferta y distribucion_utilizacion por
   # sus totales, para distribuirlo.
   distribucion_oferta2 <- distribucion_oferta * prod_cons_energetico$`Producción`
-  distribucion_uti2 <- distribucion_utilizacion * prod_cons_energetico$`Consumo intermedio y final`
+  distribucion_util2 <- distribucion_utilizacion * prod_cons_energetico$`Consumo intermedio y final`
   
   distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(prod_cons_energetico$`Producción`) - as.matrix(rowSums(distribucion_oferta2)))
-  distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(prod_cons_energetico$`Producción`) - as.matrix(rowSums(distribucion_oferta2)))
+  distribucion_util2 <- cbind(distribucion_util2,as.matrix(prod_cons_energetico$`Consumo intermedio y final`) - as.matrix(rowSums(distribucion_util2)))
+  
+  # Renombramos la columna recién creada en cada cuadro
+  
+  colnames(distribucion_oferta2)[length(colnames(distribucion_oferta2))] <- paste(iso3,"oc", length(colnames(distribucion_oferta2)) , sep = "")
+  
+  
+  
   # Unión de los cuadros procesados
   # ===============================
   
@@ -282,31 +290,4 @@ for (i in 1:length(hojas)) {
 }
 
 
-con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
 
-dbListTables(con)
-dbListFields(con,"oferta_utilizacion")
-
-# Creamos una vista para facilitar las consultas y exportación a flat file
-# de Excel. Usamos un archivo SQL para trabajar más fácilmente con
-# la consulta SQL aparte.
-test <- dbGetQuery(con, "select * from oferta_utilizacion where anio = 2013")
-
-dbDisconnect(con)
-
-pt <- PivotTable$new()
-pt$addData(test)
-pt$addColumnDataGroups("corr_ntg2", addTotal = TRUE)
-pt$addColumnDataGroups("ntg2", addTotal = FALSE)
-pt$addRowDataGroups("id_cuadro", addTotal = FALSE)
-pt$addRowDataGroups("cuadro")
-pt$addRowDataGroups("id_area_filas", addTotal = FALSE)
-pt$defineCalculation(calculationName = "Quetzales", summariseExpression = "sum(valor)")
-pt$renderPivot()
-
-wb <- createWorkbook(creator = Sys.getenv("USERNAME"))
-addWorksheet(wb, "Data")
-pt$writeToExcelWorksheet(wb=wb, wsName="Data", 
-                         topRowNumber=1, leftMostColumnNumber=1, 
-                         applyStyles=TRUE, mapStylesFromCSS=TRUE)
-saveWorkbook(wb, file="salidas/test.xlsx", overwrite = TRUE)
