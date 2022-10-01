@@ -4,6 +4,8 @@ library(openxlsx)
 library(reshape2)
 library(stringr)
 library(plyr)
+library(RSQLite)
+library(DBI)
 
 # Limpiar el área de trabajo
 rm(list = ls())

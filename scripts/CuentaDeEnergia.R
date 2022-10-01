@@ -260,6 +260,7 @@ for (i in 1:length(hojas)) {
   distribucion_uti2 <- distribucion_utilizacion * prod_cons_energetico$`Consumo intermedio y final`
   
   distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(prod_cons_energetico$`Producción`) - as.matrix(rowSums(distribucion_oferta2)))
+  distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(prod_cons_energetico$`Producción`) - as.matrix(rowSums(distribucion_oferta2)))
   # Unión de los cuadros procesados
   # ===============================
   
