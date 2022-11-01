@@ -23,6 +23,9 @@ rm(list = ls())
 
 # Nota: Hacemos referencia a los archivos tomando 
 # como punto de partida la raíz del repositorio
+# Para que esto funcione, es necesario abrir el 
+# proyecto a través del proyecto de RStudio
+# scn_scae_gt.Rproj
 
 # scn_scae_gt
 #   ├───datos
@@ -42,6 +45,37 @@ hojas <- hojas[-c(3,5,7,9,11,13,15)]
 i <- 1
 
 lista <- c("inicio")
+
+# Antes de entrar al bucle de cálculo, importamos los 
+# Coeficientes de emisiones, para no hacerlo cada
+# ciclo.
+
+# Coeficientes de CO2
+
+CO2_coef <- as.matrix(read_excel(
+  "datos/CLASIFICACIONES.xlsx",
+  range = "gei'!C6:EY21",
+  col_names = FALSE,
+  col_types = "numeric"
+))
+
+CH4_coef <- as.matrix(read_excel(
+  "datos/CLASIFICACIONES.xlsx",
+  range = "gei'!C25:EY40",
+  col_names = FALSE,
+  col_types = "numeric"
+))
+
+N2O_coef <- as.matrix(read_excel(
+  "datos/CLASIFICACIONES.xlsx",
+  range = "gei'!C44:EY59",
+  col_names = FALSE,
+  col_types = "numeric"
+))
+
+# Abrimos la conexión a la base de datos
+con <- dbConnect(RSQLite::SQLite(), "salidas/scn.db")
+
 
 for (i in 1:length(hojas)) {
   
@@ -75,7 +109,7 @@ for (i in 1:length(hojas)) {
   # Procesamiento del Cuadro de Oferta Energética
   # ==================================
   
-  id_cuadro <- 3 # 1  Oferta energética
+  id_cuadro <- 3 # 1  Oferta energética monetaria
   
   # Leemos todo el rectángulo que contiene datos.
   oferta <- as.matrix(read_excel(
@@ -121,19 +155,8 @@ for (i in 1:length(hojas)) {
   distribucion_oferta <- distribucion_oferta / suma_distribucion_oferta
   
   # Limpiamos
-  rm(oferta, suma_distribucion_oferta)
+  rm(suma_distribucion_oferta)
   
-  # Melt 
-    
-  # oferta <- cbind(iso3, anio,id_cuadro, melt(oferta), id_unidad)
-  # colnames(oferta) <-
-  #   c("iso3",
-  #     "anio",
-  #     "id_cuadro",
-  #     "id_fila",
-  #     "id_columna",
-  #     "valor",
-  #     "id_unidad")
   
   # Procesamiento del Cuadro de Utilización
   # =======================================
@@ -197,97 +220,320 @@ for (i in 1:length(hojas)) {
   distribucion_utilizacion <- distribucion_utilizacion / suma_distribucion_utilizacion
   
   # Y limpiamos
-  rm(utilizacion, suma_distribucion_utilizacion)
-  
-  # utilizacion <- cbind(iso3,anio, id_cuadro, melt(utilizacion), id_unidad)
-  # 
-  # colnames(utilizacion) <-
-  #   c("iso3",
-  #     "anio",
-  #     "id_cuadro",
-  #     "id_fila",
-  #     "id_columna",
-  #     "valor",
-  #     "id_unidad")
+  rm( suma_distribucion_utilizacion)
   
   
-  # Traemos la producción y consumo intermedio y final energéticos
-  
-  con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
-  prod_cons_energetico <- 
-  join(
-    dbGetQuery(con,paste(
+  # Traemos los balances energéticos ordenados en forma de cuenta para
+  # obtener los totales
+  energiaTotal <- dbGetQuery(con,paste(
     'SELECT 
+      id_ntgeM,
       id_npg4,
-      sum(valor) AS "Producción" 
+      sum(valor) AS "Tj" 
     FROM 
       balances_energeticos
     WHERE
       anio = ', 
     anio , 
-    ' and id_ntgeM = 1
-      and id_npg4 != "" 
+    ' and id_npg4 != "" 
     GROUP BY 
+      id_ntgeM,
       id_npg4
     ORDER BY
+      id_ntgeM,
       id_npg4')
-    )
-    ,
-    dbGetQuery(con,paste(
-      'SELECT 
-      id_npg4,
-      sum(valor) AS "Consumo intermedio y final"
+  )
+  
+  # id_ntgeM  ntgeM
+  # 1 	      Producción
+  # 2 	      Importaciones de bienes y servicios
+  # 4 	      Consumo de energéticos (intermedio y final)
+  # 6 	      Exportaciones de bienes y servicios
+  # 7 	      Formación de capital
+  # 8 	      Pérdidas
+  # 9 	      No aprovechado
+  
+  # Lo ponemos en formato de matriz
+  energiaTotal <- as.data.frame(tapply(energiaTotal$Tj, 
+                         list(energiaTotal$id_npg4, 
+                              energiaTotal$id_ntgeM), 
+                         sum))
+
+  # Y multiplicamos la distribucion_oferta y distribucion_utilizacion por
+  # sus totales, para distribuirlo.
+  distribucion_oferta2 <- distribucion_oferta * energiaTotal$`1`
+  distribucion_util2 <- distribucion_utilizacion * energiaTotal$`4`
+  
+  # Y el remanente lo agregamos como una columna de "el resto".
+  
+  distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(energiaTotal$`1`) - as.matrix(rowSums(distribucion_oferta2)))
+  distribucion_util2 <- cbind(distribucion_util2,as.matrix(energiaTotal$`4`) - as.matrix(rowSums(distribucion_util2)))
+
+  # Agregamos las columnas que nos hacen falta en la oferta y en la utilización
+  
+  ofertaE <- cbind(distribucion_oferta2, energiaTotal$`2`)
+  utilizacionE <- cbind(distribucion_util2, energiaTotal$`6`, energiaTotal$`7`, energiaTotal$`8`, energiaTotal$`9`)
+  
+  # Agregamos los productos que no están en la parte monetaria.
+  
+  insumosAmbientales <- dbGetQuery(con,paste(
+    'SELECT 
+      id_ntgeM,
+      id_energetico,
+      sum(valor) AS "Tj" 
     FROM 
       balances_energeticos
     WHERE
       anio = ', 
-      anio , 
-      ' and id_ntgeM = 4
-      and id_npg4 != "" 
+    anio , 
+    ' and id_energetico IN (\'EP04\', \'EP05\', \'EP09\') 
     GROUP BY 
-      id_npg4
+      id_ntgeM,
+      id_energetico
     ORDER BY
-      id_npg4')
-    )
-    ,
-    by = "id_npg4"
-  )  
+      id_ntgeM,
+      id_energetico')
+  )
   
-  dbDisconnect(con)
+  insumosAmbientales <- as.data.frame(tapply(insumosAmbientales$Tj, 
+                                             list(insumosAmbientales$id_energetico, 
+                                                  insumosAmbientales$id_ntgeM), 
+                                             sum))
   
-  # Y multiplicamos la distribucion_oferta y distribucion_utilizacion por
-  # sus totales, para distribuirlo.
-  distribucion_oferta2 <- distribucion_oferta * prod_cons_energetico$`Producción`
-  distribucion_util2 <- distribucion_utilizacion * prod_cons_energetico$`Consumo intermedio y final`
+  # Agregamos los insumos ambientales a la oferta
   
-  distribucion_oferta2 <- cbind(distribucion_oferta2,as.matrix(prod_cons_energetico$`Producción`) - as.matrix(rowSums(distribucion_oferta2)))
-  distribucion_util2 <- cbind(distribucion_util2,as.matrix(prod_cons_energetico$`Consumo intermedio y final`) - as.matrix(rowSums(distribucion_util2)))
+  ofertaE <- cbind(ofertaE, 0)
+  ofertaE <- rbind(matrix(0,nrow= dim(insumosAmbientales[1]), ncol = dim(ofertaE)[2]),ofertaE)
+  ofertaE[c(1:dim(insumosAmbientales)[1]), dim(ofertaE)[2]] <- insumosAmbientales$`1`
   
-  # Renombramos la columna recién creada en cada cuadro
+  # Puesto que los insumos ambientales se utilizan por las actividades
+  # no se agrega columna de estos al cuadro de utilización, pero sí 
+  # se agregan las filas correspondientes y los valores a la actividad que los usa
+  utilizacionE <- rbind(matrix(0,nrow= dim(insumosAmbientales[1]), ncol = dim(utilizacionE)[2]),utilizacionE)
+  utilizacionE[c(1:dim(insumosAmbientales)[1]), match("GTMuc082",colnames(utilizacionE))] <- insumosAmbientales$`4`
+
+  # Y renombramos los elementos recién agregados en cada cuadro
+  colnames(ofertaE)[c((length(colnames(ofertaE))-2) : length(colnames(ofertaE)))] <- c("GTMoc000a", "GTMoc151","GTMoc000b")
+  colnames(utilizacionE)[c((length(colnames(utilizacionE))-4) : length(colnames(utilizacionE)))] <- c("GTMuc000a", "GTMuc151","GTMuc163","GTMuc000b","GTMuc000c")
   
-  colnames(distribucion_oferta2)[length(colnames(distribucion_oferta2))] <- paste(iso3,"oc", length(colnames(distribucion_oferta2)) , sep = "")
+  rownames(ofertaE)[ c(1: dim(insumosAmbientales)[1])] <- c("GTMf000a","GTMf000b", "GTMf000c")
+  rownames(utilizacionE)[ c(1: dim(insumosAmbientales)[1])] <- c("GTMf000a","GTMf000b", "GTMf000c")
+  
+  # ========================
+  # Emisiones CO2, CH4 y N2o 
+  # ========================
+  
+  # Multiplicacion por coeficientes elemento por elemento
+  # (No es multiplicación de matrices)
+  
+  emisiones_CO2 <- utilizacionE * CO2_coef / 1000
+  emisiones_CH4 <- utilizacionE * CH4_coef / 1000
+  emisiones_N2O <- utilizacionE * N2O_coef / 1000
+  
+  # Melts de cuadros procesados
+  # Melt 
+  
+  # Cuadros: 
+  # 1 Oferta
+  # 2 Utilización
+  # 3 Oferta energética monetaria
+  # 4 Utilización energética monetaria
+  # 5 Oferta energética física
+  # 6 Utilización energética física
+  # 7 Oferta de CO2 equivalente
+  # 8 Oferta de CH4 equivalente
+  # 9 Oferta de N2O equivalente
+  
+  # Unidad:
+  # 1 Millones de quetzales
+  # 2 Millones de quetzales en medidas encadenadas 
+  #   de volumen con año de referencia 2013
+  # 3 Terajulios
+  # 4 Toneladas métricas
+  # 5 Toneladas equivalentes de dióxido de carbono
+  
+  oferta_energetica_monetaria <- cbind(iso3, 
+                                       anio,
+                                       3, 
+                                       melt(oferta_monetaria), 
+                                       1)
+  colnames(oferta_energetica_monetaria) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+
+  utilizacion_energetica_monetaria <- cbind(iso3, 
+                                       anio,
+                                       4, 
+                                       melt(utilizacion_monetaria), 
+                                       1)
+  colnames(utilizacion_energetica_monetaria) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+  
+  oferta_energetica_fisica <- cbind(iso3, 
+                                       anio,
+                                       5, 
+                                       melt(ofertaE), 
+                                       3)
+  colnames(oferta_energetica_fisica) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+  
+  utilizacion_energetica_fisica <- cbind(iso3, 
+                                            anio,
+                                            6, 
+                                            melt(utilizacionE), 
+                                            3)
+  colnames(utilizacion_energetica_fisica) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+  
+  oferta_gei_co2_eq <- cbind(iso3, 
+                                    anio,
+                                    7, 
+                                    melt(emisiones_CO2), 
+                                    5)
+  colnames(oferta_gei_co2_eq) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+  
+  oferta_gei_ch4_eq <- cbind(iso3, 
+                             anio,
+                             8, 
+                             melt(emisiones_CH4*84), # CH4 GWP 20 años 
+                             5)
+  colnames(oferta_gei_ch4_eq) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+  
+  oferta_gei_n2o_eq <- cbind(iso3, 
+                             anio,
+                             9, 
+                             melt(emisiones_N2O*298), # N2O GWP 20 años 
+                             5)
+  colnames(oferta_gei_n2o_eq) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
   
   
+
+    
   
   # Unión de los cuadros procesados
   # ===============================
   
+  
+  
   if (precios == "Corrientes") {
-    union <- rbind(oferta, 
-                   utilizacion
-                   #,valorAgregado, 
-                   #empleo
+    union <- rbind(oferta_energetica_monetaria,
+                   utilizacion_energetica_monetaria,
+                   oferta_energetica_fisica,
+                   utilizacion_energetica_fisica,
+                   oferta_gei_co2_eq,
+                   oferta_gei_ch4_eq,
+                   oferta_gei_n2o_eq
     )
     
-    assign(paste("COU_", anio, "_", precios, sep = ""), 
-           union)
+    assign(paste("COU_E_", anio, sep = ""), union)
   } else {
-    union <- rbind(oferta, utilizacion)
-    assign(paste("COU_", anio, "_", precios, sep = ""), 
-           union)
+    union <- rbind(oferta_energetica_monetaria,
+                   utilizacion_energetica_monetaria,
+                   oferta_energetica_fisica,
+                   utilizacion_energetica_fisica,
+                   oferta_gei_co2_eq,
+                   oferta_gei_ch4_eq,
+                   oferta_gei_n2o_eq
+    )
+    assign(paste("COU_E_", anio, sep = ""), union)
   }
-  lista <- c(lista, paste("COU_", anio, "_", precios, sep = ""))
+  lista <- c(lista, paste("COU_E_", anio, sep = ""))
 }
 
 
+
+# Eliminamos el primer elemento provisional que usamos para inicializar
+# la lista, pues R no nos permite declarar listas vacías. 
+lista <- lapply(lista[-1], as.name)
+
+# Unimos los objetos de todos los años y precios
+SCN_E <- do.call(rbind.data.frame, lista)
+
+# Por conveniencia, convertimos los valores NA a 0
+SCN_E$valor[is.na(SCN_E$valor)] <- 0
+
+# Y borramos los objetos individuales
+do.call(rm,lista)
+
+# Recolección de basura
+gc()
+
+head(SCN_E)
+
+# Base de datos
+
+dbSendStatement(con, "DROP TABLE IF EXISTS scn_e")
+dbCreateTable(con, "scn_e", SCN_E)
+dbAppendTable(con, "scn_e", SCN_E)
+
+# Crear vista
+query <- read_file("scripts/VIEW_cuenta_energia.sql")
+dbSendStatement(con, "DROP VIEW IF EXISTS cuenta_energia")
+dbSendQuery(con, query)
+
+# Leer vista para Excel
+SCN_E2 <- dbGetQuery(con,"
+SELECT 
+  * 
+FROM 
+  cuenta_energia 
+")
+
+
+# Cerramos la conexión a la base de datos
+dbDisconnect(con)
+
+write.xlsx(
+  SCN_E2,
+  "salidas/SCN_E.xlsx",
+  sheetName= "SCNE_BD",
+  rowNames=FALSE,
+  colnames=FALSE,
+  overwrite = TRUE,
+  asTable = FALSE
+)
 

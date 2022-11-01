@@ -107,6 +107,10 @@ clasificacionFilas <- read_xlsx(
     sheet = "filas",
     col_names = TRUE)
 
+# Hay elementos necesarios que solo pueden conocerse su condición de oferta o
+# utilización como resultado de una clasificación cruzada entre filas y
+# columnas.
+
 clasificacionFilasXcolumnas <- read_xlsx(
   "datos/CLASIFICACIONES_BALANCES.xlsx",
   sheet = "filasXcolumnas",
@@ -123,7 +127,8 @@ BAL <- join(BAL,clasificacionFilasXcolumnas, by = "id_filasXcolumnas")
 
 gc()
 
-con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
+con <- dbConnect(RSQLite::SQLite(), "salidas/scn.db")
+dbSendStatement(con, "DROP TABLE IF EXISTS balances_energeticos")
 dbCreateTable(con, "balances_energeticos", BAL)
 dbAppendTable(con, "balances_energeticos", BAL)
 dbDisconnect(con)
@@ -131,7 +136,7 @@ dbDisconnect(con)
 # Y lo exportamos a Excel
 write.xlsx(
   BAL,
-  "datos/BALGT_BD.xlsx",
+  "salidas/BALGT_BD.xlsx",
   sheetName= "BALGT_BD",
   rowNames=FALSE,
   colnames=FALSE,
@@ -142,7 +147,7 @@ write.xlsx(
 # El formato CSV se exporta muy grande, pero se comprime muy bien a 3mb
 write.csv(
   BAL,
-  "datos/balgt.csv",
+  "salidas/balgt.csv",
   row.names = FALSE,
   fileEncoding = "UTF-8"
 )

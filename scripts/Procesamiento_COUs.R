@@ -168,7 +168,7 @@ for (i in 1:length(hojas)) {
   # se hará a través del campo de unidad de medida `id_unidad`. Es decir
   # Millones de quetzales constantes. 
   
-  # Por el momento no se incluirá precios constantes.
+  # Por conveniencia no se incluirá precios constantes.
   
   oferta <- cbind(iso3, anio,id_cuadro, melt(oferta), id_unidad)
   
@@ -334,6 +334,13 @@ filas <- read_excel(
   col_names = TRUE
 )
 
+# filas Energía
+filasE <- read_excel(
+  clasifs,
+  sheet = "filasE"  ,
+  col_names = TRUE
+)
+
 # ntg2
 ntg2 <- read_excel(
   clasifs,
@@ -388,10 +395,10 @@ cuadros <- read_excel(
 # Base de datos SQLite
 # ====================
 
-if (file.exists("datos/scn.db")) {
-  file.remove("datos/scn.db")
+if (file.exists("salidas/scn.db")) {
+  file.remove("salidas/scn.db")
 }
-con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
+con <- dbConnect(RSQLite::SQLite(), "salidas/scn.db")
 dbCreateTable(con, "scn", SCN)
 dbAppendTable(con, "scn", SCN)
 summary(con)
@@ -403,6 +410,10 @@ dbAppendTable(con, "columnas", columnas)
 # filas
 dbCreateTable(con, "filas", filas)
 dbAppendTable(con, "filas", filas)
+
+# filasE
+dbCreateTable(con, "filasE", filasE)
+dbAppendTable(con, "filasE", filasE)
 
 # ntg2
 dbCreateTable(con, "ntg2", ntg2)
@@ -432,23 +443,6 @@ dbAppendTable(con, "energia", energia)
 dbCreateTable(con, "cuadros", cuadros)
 dbAppendTable(con, "cuadros", cuadros)
 
-# Consulta prueba
-dbGetQuery(con, "
-SELECT
-    anio,
-    cuadro,
-    sum(valor)
-FROM 
-    scn
-LEFT JOIN
-    cuadros
-ON
-    scn.id_cuadro
-    =
-    cuadros.id_cuadro
-GROUP BY 
-    anio, cuadro
-")
 
 dbListTables(con)
 dbListFields(con,"cuadros")
@@ -459,13 +453,12 @@ dbListFields(con,"cuadros")
 
 query <- read_file("scripts/VIEW_oferta_utilizacion.sql")
 dbSendQuery(con, query)
-dbDisconnect(con)
+
 
 # ====================
 # Otras exportaciones
 # ====================
 
-con <- dbConnect(RSQLite::SQLite(), "datos/scn.db")
 
 SCN2 <- dbGetQuery(con,"
 SELECT 
@@ -477,7 +470,7 @@ FROM
 # Y lo exportamos a Excel
 write.xlsx(
   SCN2,
-  "datos/SCN_BD.xlsx",
+  "salidas/SCN_BD.xlsx",
   sheetName= "SCNGT_BD",
   rowNames=FALSE,
   colnames=FALSE,
