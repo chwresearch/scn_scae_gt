@@ -244,20 +244,67 @@ for (i in 1:length(hojas)) {
       "id_unidad")
 
   
+  # Procesamiento del Valor Agregado
+  # =======================================
+  
+  id_cuadro  <- 10 # Valor Agregado
+  
+  # El procesamiento del Cuadro de Utilización es idéntico al de oferta. 
+  
+  # Leemos el rectángulo de datos del archivo de Excel original.
+  valorAgregado <- as.data.frame(read_excel(
+    archivo,
+    range = paste("'" , hojas[i], "'!D478:ET478", sep = ""),
+    col_names = FALSE,
+    col_types = "numeric"
+  ))
+  
+  # Y nombramos las filas y columnas con los correlativos necesarios.
+  rownames(valorAgregado) <-
+    "GTMva000"
+  
+  colnames(valorAgregado) <-
+    c(sprintf(paste(iso3,"uc%03d", sep = ""), seq(1, dim(valorAgregado)[2])))
+  
+  #   Columnas y filas a eliminar con subtotales y totales
+  
+  #   uc130	P2 CONSUMO INTERMEDIO (PC)	SUBTOTAL DE MERCADO
+  #   uc135	P2 CONSUMO INTERMEDIO (PC)	SUBTOTAL USO FINAL PROPIO
+  #   uc147	P2 CONSUMO INTERMEDIO (PC)	SUBTOTAL NO DE MERCADO
+  
+  # A través de índices eliminamos lo que no se necesita.
+  valorAgregado <- valorAgregado[ , -c(129, 130, 135, 147)]
+  
+  # Aplicamos la función `melt()` para convertir a formato de tabla de base
+  # de datos, poniendo cuidado en que las columnas sean compatibles con el
+  # cuadro de oferta que creamos en la sección anterior.
+  
+  valorAgregado <-
+    cbind(iso3,anio, id_cuadro, "GTMva000", melt(valorAgregado), id_unidad)
+  
+  colnames(valorAgregado) <-
+    c("iso3",
+      "anio",
+      "id_cuadro",
+      "id_fila",
+      "id_columna",
+      "valor",
+      "id_unidad")
+  
   # Unión de los cuadros procesados
   # ===============================
   
   if (precios == "Corrientes") {
     union <- rbind(oferta, 
-                   utilizacion
-                   #,valorAgregado, 
+                   utilizacion,
+                   valorAgregado, 
                    #empleo
-                   )
+                   deparse.level = 0)
     
     assign(paste("COU_", anio, "_", precios, sep = ""), 
            union)
   } else {
-    union <- rbind(oferta, utilizacion)
+    union <- rbind(oferta, utilizacion, valorAgregado, deparse.level = 0)
     assign(paste("COU_", anio, "_", precios, sep = ""), 
            union)
   }

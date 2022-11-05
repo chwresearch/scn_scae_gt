@@ -425,7 +425,7 @@ for (i in 1:length(hojas)) {
   oferta_gei_ch4_eq <- cbind(iso3, 
                              anio,
                              8, 
-                             melt(emisiones_CH4*84), # CH4 GWP 20 años 
+                             melt(emisiones_CH4*56), # CH4 GWP 20 años 
                              5)
   colnames(oferta_gei_ch4_eq) <-
     c("iso3",
@@ -439,7 +439,7 @@ for (i in 1:length(hojas)) {
   oferta_gei_n2o_eq <- cbind(iso3, 
                              anio,
                              9, 
-                             melt(emisiones_N2O*298), # N2O GWP 20 años 
+                             melt(emisiones_N2O*280), # N2O GWP 20 años 
                              5)
   colnames(oferta_gei_n2o_eq) <-
     c("iso3",

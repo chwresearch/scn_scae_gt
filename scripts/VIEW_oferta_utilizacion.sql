@@ -19,6 +19,8 @@ SELECT
 	naeg.id_ciiu1,
 	naeg.ciiu1,
 	naeg.ciiu1_corto,
+	naeg.id_ciiu1_compacta,
+	naeg.ciiu1_compacta,
 	filas.id_area_filas,
 	areas_filas.area_filas,
 	filas.id_npg4,
