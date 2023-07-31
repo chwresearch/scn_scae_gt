@@ -2,8 +2,8 @@
 title: "Memoria de Procesamiento COUs"
 author: "Renato Vargas"
 output:
-  word_document: default
   html_document: default
+  word_document: default
   pdf_document: default
 ---
 
