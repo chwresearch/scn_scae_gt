@@ -13,6 +13,8 @@ library(plyr)
 library(RSQLite)
 library(DBI)
 library(readr)
+library(tidyverse)
+library(ggplot2)
 
 # Limpiar el área de trabajo
 rm(list = ls())
@@ -513,6 +515,26 @@ SELECT
 FROM 
   oferta_utilizacion 
 ")
+
+# Graficamos un mapa de calor para el último año
+
+data <- SCN2 |>
+  filter(id_cuadro == 2 & 
+           anio == 2020 & 
+           energia != "NA" & 
+           energia != "No energético" & 
+           ciiu1_compacta != "NA")
+
+
+data |> 
+  count(ciiu1_compacta, npg4, valor) |>
+  ggplot(aes(x = ciiu1_compacta, y = npg4)) +
+  geom_tile(aes(fill = valor)) +
+  scale_fill_distiller(palette = "Oranges", direction = 1) +
+  theme(axis.text.x = element_text(angle=90)) 
+
+
+
 
 # Y lo exportamos a Excel
 write.xlsx(
